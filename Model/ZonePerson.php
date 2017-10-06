@@ -43,7 +43,7 @@ class ZonePerson extends AppModel {
   // Validation rules for table elements
   public $validate = array(
     'attributes' => array(
-      'rule' => 'string',
+      'rule' => 'notBlank',
       'required' => true,
       'message' => 'Attribute definitions missing'
     )

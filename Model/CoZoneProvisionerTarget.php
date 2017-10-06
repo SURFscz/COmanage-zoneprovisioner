@@ -494,7 +494,8 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
   private function getUID($attributes) {
     $uidattr = Configure::read('scz.uid');
     if(!isset($attributes[$uidattr])) {
-      throw new RuntimeException("Attribute missing");
+      //throw new RuntimeException("Attribute missing");
+      return null;
     }
 
     $uidattr = $attributes[$uidattr];
@@ -578,6 +579,11 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       $services=array();
     }
     $uidattr = $this->getUID($attributes);
+    if($uidattr === null)
+    {
+        // this person cannot be provisioned, because it is not complete
+        return true;
+    }
     $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr)));
     if(empty($person)) {
       if($delete) {
