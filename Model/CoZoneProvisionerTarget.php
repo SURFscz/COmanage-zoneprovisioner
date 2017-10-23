@@ -66,6 +66,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
    * @throws UnderflowException
    */
   protected function assembleServices($provisioningData) {
+    $coid = intval($provisioningData["Co"]["id"]);
     $uris=array();
     if(!empty($provisioningData['CoGroupMember'])) {
       foreach($provisioningData['CoGroupMember'] as $gm) {
@@ -82,16 +83,17 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
 
     // check these services exists as ZoneService
     $this->ZoneService->contain(FALSE);
-    $services=$this->ZoneService->find('all',array('conditions'=> array('metadata' => array_keys($uris))));
+    $services=$this->ZoneService->find('all',array('conditions'=> array('metadata' => array_keys($uris), 'co_id' => $coid)));
     $metadata=array();
     foreach($services as $service) {
       $metadata[$service['ZoneService']['metadata']] = $service['ZoneService']['id'];
     }
     foreach($uris as $uri=>$model) {
-      if(!isset($metadata[$uri])) {
+      if(!isset($metadata[$uri]) && strlen(trim($uri))) {
         // create a new ZoneService
         $this->ZoneService->save(array(
           'metadata'=>$uri,
+          'co_id' => $coid,
           'attributes' => json_encode(array('co_service_id'=>$model['id']))
           ));
         $service = $this->ZoneService->find('first',array('conditions'=>array('id'=>$this->ZoneService->id)));
@@ -481,7 +483,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
    * @return String Attribute field content
    */
   private function convertAttributes($attributes) {
-    // TODO: see if JSON is a good-enough content encoder... perhaps simple CRLF separated lines works better
     return json_encode($attributes);
   }
 
@@ -584,7 +585,8 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         // this person cannot be provisioned, because it is not complete
         return true;
     }
-    $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr)));
+    $coid = intval($provisioningData["Co"]["id"]);
+    $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $coid)));
     if(empty($person)) {
       if($delete) {
         // we are already done
@@ -592,7 +594,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       }
       $add=true;
       try {
-        $this->ZonePerson->save(array('uid'=>$uidattr, 'attributes'=>''));
+        $this->ZonePerson->save(array('uid'=>$uidattr, "co_id" => $coid, 'attributes'=>''));
         $person = $this->ZonePerson->find('first',array('conditions'=>array('id'=>$this->ZonePerson->id)));
       } catch(Exception $e) {
         $person=null;
@@ -614,7 +616,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       // would then add the new ZonePerson. For that reason, we add the user at the start of the provisioning
       // process, to minimise the chances a slow-change will be outpaced by a fast-delete.
       // However, the assembleAttributes call is probably by far the slowest part anyway.
-      $this->ZonePerson->deleteAll(array('uid'=>$uidattr),true);
+      $this->ZonePerson->deleteAll(array('uid'=>$uidattr, "co_id" => $coid),true);
     } else if($add || $modify) {
       $person['ZonePerson']['attributes']=$this->convertAttributes($attributes);
       $person['ZoneService']=array_values($services);
@@ -644,7 +646,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     $config = Configure::load('scz','default');
     $attributes = $this->assembleAttributes($provisioningData);
     $uidattr = $this->getUID($attributes);
-    $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr)));
+    $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $this->CoProvisioningData->Co->id)));
 
     if(!empty($person)) {
       $ret['timestamp'] = $person['modified'];
