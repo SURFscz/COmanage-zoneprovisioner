@@ -120,7 +120,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     // First see if we're working with a Group record or a Person record
     $person = isset($provisioningData['CoPerson']['id']);
     $group = isset($provisioningData['CoGroup']['id']);
-    $scope_suffix = Configure::read('scz.scope_suffix');
+    $scope_suffix = $this->templateReplace(Configure::read('scz.scope_suffix'),$provisioningData);
 
     // Marshalled attributes ready for export
     $attributes = array();
@@ -379,7 +379,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
             foreach($provisioningData['CoGroupMember'] as $gm) {
               if(  isset($gm['member']) && $gm['member']
                 && !empty($gm['CoGroup']['name'])) {
-                $attributes[$export_name][] = $gm['CoGroup']['name'];
+                $attributes[$export_name][] = $provisioningData['Co']['name'] .':'.$gm['CoGroup']['name'];
               }
             }
           }
@@ -462,6 +462,17 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       }
     }
     return $attributes;
+  }
+
+  /**
+   * Template Replace the attribute value
+   *
+   * @param  String Attribute content
+   * @param  Array provisioningData
+   * @return String Modified attribute
+   */
+  private function templateReplace($attribute, $provisioningData) {
+    return str_replace(array("{CO}"),array($provisioningData['Co']['name']), $attribute);
   }
 
 
