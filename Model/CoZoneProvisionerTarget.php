@@ -494,6 +494,13 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
    * @return String Attribute field content
    */
   private function convertAttributes($attributes) {
+    $keepuid = Configure::read('scz.export_uid_attribute');
+    if(!$keepuid) {
+      $uidattr = Configure::read('scz.uid');
+      if(isset($attributes[$uidattr])) {
+        unset($attributes[$uidattr]);
+      }
+    }
     return json_encode($attributes);
   }
 
@@ -594,6 +601,8 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     if($uidattr === null)
     {
         // this person cannot be provisioned, because it is not complete
+        $uidattr = Configure::read('scz.uid');
+        CakeLog::write('debug','skipping person because uid '.$uidattr.' is not present in '.json_encode($attributes));
         return true;
     }
     $coid = intval($provisioningData["Co"]["id"]);

@@ -2,7 +2,8 @@
 $config=array(
   'scz' => array(
 #    'scope_suffix'  => '',
-    'uid' => 'eppn',
+    'uid' => 'eppn',    
+    'export_uid_attribute' => FALSE,
     'attributes' => array(
       'eppn' => array('attribute'=>'eduPersonPrincipalName', 'type'=>'eppn'),
 
