@@ -602,7 +602,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     {
         // this person cannot be provisioned, because it is not complete
         $uidattr = Configure::read('scz.uid');
-        CakeLog::write('debug','skipping person because uid '.$uidattr.' is not present in '.json_encode($attributes));
+        CakeLog::write('error','zoneprovisioner: skipping COPerson "'.$provisioningData['CoPerson']['id'].'" because UID '.$uidattr.' is not present in the list of attributes');
         return true;
     }
     $coid = intval($provisioningData["Co"]["id"]);
@@ -622,6 +622,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     }
 
     if(empty($person)) {
+      CakeLog::write('error','zoneprovisioner: cannot connect to remote database');
       throw new RuntimeException("Error writing to database");
     }
 
