@@ -230,6 +230,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         case 'eduPersonUniqueId':
         case 'employeeNumber':
         case 'uid':
+        case 'mail':
           // Map the attribute to the model and column
           $mods = array(
             'eduPersonOrcid' => 'Identifier',
@@ -312,7 +313,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         // Attributes from models attached to CO Person Role
         case 'facsimileTelephoneNumber':
         case 'l':
-        case 'mail':
         case 'mobile':
         case 'postalCode':
         case 'roomNumber':
@@ -323,7 +323,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
           $mods = array(
             'facsimileTelephoneNumber' => 'TelephoneNumber',
             'l' => 'Address',
-            'mail' => 'EmailAddress',
             'mobile' => 'TelephoneNumber',
             'postalCode' => 'Address',
             'roomNumber' => 'Address',
@@ -335,7 +334,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
           $cols = array(
             'facsimileTelephoneNumber' => 'number',
             'l' => 'locality',
-            'mail' => 'mail',
             'mobile' => 'number',
             'postalCode' => 'postal_code',
             'roomNumber' => 'room',
