@@ -35,7 +35,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
   public $name = "CoZoneProvisionerTarget";
 
   // Add behaviors
-  public $actsAs = array('Containable');
+  public $actsAs = array('Containable','ZoneProvisioner.Role');
 
   // Association rules from this model to other models
   public $belongsTo = array("CoProvisioningTarget");
@@ -57,6 +57,61 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
   // Cache of schema plugins, populated by supportedAttributes
   protected $plugins = array();
 
+  public function findServicesByPerson($coId, $coPersonId=null, $couId=null) {
+    // First determine which visibilities to retrieve. Unlike most other cases,
+    // we do NOT treat admins specially. They can look in the configuration
+    // if they need to see the complete list.
+    $visibility = array(VisibilityEnum::Unauthenticated);
+    $groups = null;
+
+    if($coPersonId) {
+      // Is this person an admin?
+      if($this->isCoAdmin($coPersonId, $coId)) {
+        $visibility[] = VisibilityEnum::CoAdmin;
+      }
+
+      if($this->isCoPerson($coPersonId, $coId)) {
+        $visibility[] = VisibilityEnum::CoMember;
+
+        // The join on CoGroupMember would be way too complicated, it'd be easier
+        // to just pull two queries and merge. Instead, we'll just pull everything
+        // flagged for CoGroupMember and then filter the results manually based on
+        // the person's groups.
+        $visibility[] = VisibilityEnum::CoGroupMember;
+
+        $groups = $this->CoProvisioningTarget->Co->CoGroup->findForCoPerson($coPersonId, null, null, null, false);
+      }
+    }
+    $args = array();
+    $args['conditions']['CoService.co_id'] = $coId;
+    if($couId !== false) {
+      // COU ID does not constrain visibility, it's basically like having a COU level portal
+      $args['conditions']['CoService.cou_id'] = $couId;
+    }
+    $args['conditions']['CoService.visibility'] = $visibility;
+    $args['conditions']['CoService.status'] = SuspendableStatusEnum::Active;
+    $args['order'] = 'CoService.name';
+    $args['contain'] = false;
+    $services = $this->CoProvisioningTarget->Co->CoService->find('all', $args);
+    $groupIds = null;
+    if(!empty($groups) && !empty($services) && $coPersonId) {
+      // If $coPersonId is not set, there won't be any services with a CoGroupMember visibility
+
+      $groupIds = Hash::extract($groups, '{n}.CoGroup.id');
+    }
+
+    // Walk the list of services and remove any with a group_id that doesn't match
+
+    for($i = count($services) - 1;$i >= 0;$i--) {
+      if($services[$i]['CoService']['visibility'] == VisibilityEnum::CoGroupMember
+         && $services[$i]['CoService']['co_group_id']
+         && !in_array($services[$i]['CoService']['co_group_id'], $groupIds)) {
+        unset($services[$i]);
+      }
+    }
+
+    return $services;
+  }
 
   /**
    * Assemble services
@@ -66,21 +121,18 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
    * @throws UnderflowException
    */
   protected function assembleServices($provisioningData) {
-    $coid = intval($provisioningData["Co"]["id"]);
-    $uris=array();
-    if(!empty($provisioningData['CoGroupMember'])) {
-      foreach($provisioningData['CoGroupMember'] as $gm) {
-        if(  isset($gm['member']) && $gm['member']
-          && !empty($gm['CoGroup']['name'])) {
-          $this->CoProvisioningTarget->Co->CoGroup->contain('CoService');
-          $grp=$this->CoProvisioningTarget->Co->CoGroup->find('first',array('conditions'=>array('id'=>$gm['CoGroup']['id'])));
-          foreach($grp['CoService'] as $service) {
-            $uris[$service['entitlement_uri']]=$service;
-          }
-        }
-      }
-    }
+    $coid=$provisioningData["Co"]["id"];
+    $services = $this->findServicesByPerson(
+      $coid,
+      $provisioningData["CoPerson"]["id"],
+      false
+    );
 
+    $uris=array();
+    foreach($services as $service) {
+
+      $uris[$service['CoService']['entitlement_uri']]=$service['CoService'];
+    }
     // check these services exists as ZoneService
     $this->ZoneService->contain(FALSE);
     $services=$this->ZoneService->find('all',array('conditions'=> array('metadata' => array_keys($uris), 'co_id' => $coid)));
@@ -584,6 +636,14 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         throw new RuntimeException("Not Implemented");
         break;
     }
+    $actionid=uniqid();
+    CakeLog::write('json_not',array("module"=>"zone",
+                        "action"=>"provision",
+                        "id" => $actionid,
+                        "operation" => $op,
+                        "message" => "start",
+                        "co_id"=>$provisioningData["Co"]["id"],
+                        "co_name"=>$provisioningData["Co"]["name"]));
 
     $config = Configure::load('scz','default');
     $this->ZonePerson = ClassRegistry::init('ZoneProvisioner.ZonePerson');
@@ -592,7 +652,17 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     $attributes = $this->assembleAttributes($provisioningData);
     try {
       $services = $this->assembleServices($provisioningData);
+      if(empty($services)) {
+        CakeLog::write('json_err',array("module"=>"zone",
+                            "action"=>"provision",
+                            "id" => $actionid,
+                            "message" => "no services configured"));
+      }
     } catch(Exception $e) {
+      CakeLog::write('json_err',array("module"=>"zone",
+                          "action"=>"provision",
+                          "id" => $actionid,
+                          "message" => "failed to assemble services: ".$e->getMessage()));
       $services=array();
     }
     $uidattr = $this->getUID($attributes);
@@ -601,12 +671,21 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         // this person cannot be provisioned, because it is not complete
         $uidattr = Configure::read('scz.uid');
         CakeLog::write('error','zoneprovisioner: skipping COPerson "'.$provisioningData['CoPerson']['id'].'" because UID '.$uidattr.' is not present in the list of attributes');
+        CakeLog::write('json_err',array("module"=>"zone",
+                            "action"=>"provision",
+                            "id" => $actionid,
+                            "message" => "CoPerson misses uid attribute '$uidattr'"));
         return true;
     }
     $coid = intval($provisioningData["Co"]["id"]);
     $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $coid)));
     if(empty($person)) {
       if($delete) {
+        CakeLog::write('json_not',array("module"=>"zone",
+                            "action"=>"provision",
+                            "id" => $actionid,
+                            "uid" => $uidattr,
+                            "message" => "ZonePerson not found, end of delete operation"));
         // we are already done
         return TRUE;
       }
@@ -615,12 +694,22 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         $this->ZonePerson->save(array('uid'=>$uidattr, "co_id" => $coid, 'attributes'=>''));
         $person = $this->ZonePerson->find('first',array('conditions'=>array('id'=>$this->ZonePerson->id)));
       } catch(Exception $e) {
+        CakeLog::write('json_err',array("module"=>"zone",
+                            "action"=>"provision",
+                            "id" => $actionid,
+                            "uid" => $uidattr,
+                            "message" => "Error saving ZonePerson: ".$e->getMessage()));
         $person=null;
       }
     }
 
     if(empty($person)) {
       CakeLog::write('error','zoneprovisioner: cannot connect to remote database');
+      CakeLog::write('json_err',array("module"=>"zone",
+                          "action"=>"provision",
+                          "id" => $actionid,
+                          "uid" => $uidattr,
+                          "message" => "Cannot connect to remote database"));
       throw new RuntimeException("Error writing to database");
     }
 
@@ -641,6 +730,11 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       $person['ZoneService']=array_values($services);
       $this->ZonePerson->saveAssociated($person,array('validate'=>FALSE));
     }
+    CakeLog::write('json_not',array("module"=>"zone",
+                        "action"=>"provision",
+                        "id" => $actionid,
+                        "uid" => $uidattr,
+                        "message" => "end of provisioning"));
 
     return true;
   }
