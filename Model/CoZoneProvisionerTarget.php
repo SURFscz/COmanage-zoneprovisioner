@@ -605,7 +605,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       case ProvisioningActionEnum::CoPersonPetitionProvisioned:
       case ProvisioningActionEnum::CoPersonPipelineProvisioned:
       case ProvisioningActionEnum::CoPersonReprovisionRequested:
-      case ProvisioningActionEnum::CoPersonUnexpired:
         $modify = true;
         break;
       case ProvisioningActionEnum::CoPersonExpired:
@@ -632,6 +631,11 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         // group provisioning not required
         return TRUE;
         break;
+      case ProvisioningActionEnum::AuthenticatorUpdated:
+      case ProvisioningActionEnum::CoEmailListAdded:
+      case ProvisioningActionEnum::CoEmailListDeleted:
+      case ProvisioningActionEnum::CoEmailListReprovisionRequested:
+      case ProvisioningActionEnum::CoEmailListUpdated:    
       default:
         throw new RuntimeException("Not Implemented");
         break;
