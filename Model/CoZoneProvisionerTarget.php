@@ -58,9 +58,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
   protected $plugins = array();
 
   public function findServicesByPerson($coId, $coPersonId=null, $couId=null) {
-    // First determine which visibilities to retrieve. Unlike most other cases,
-    // we do NOT treat admins specially. They can look in the configuration
-    // if they need to see the complete list.
     $visibility = array(VisibilityEnum::Unauthenticated);
     $groups = null;
 
@@ -130,7 +127,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
 
     $uris=array();
     foreach($services as $service) {
-
       $uris[$service['CoService']['entitlement_uri']]=$service['CoService'];
     }
     // check these services exists as ZoneService
@@ -143,13 +139,13 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     foreach($uris as $uri=>$model) {
       if(!isset($metadata[$uri]) && strlen(trim($uri))) {
         // create a new ZoneService
+        $this->ZoneService->clear();
         $this->ZoneService->save(array(
           'metadata'=>$uri,
           'co_id' => $coid,
           'attributes' => json_encode(array('co_service_id'=>$model['id']))
           ));
-        $service = $this->ZoneService->find('first',array('conditions'=>array('id'=>$this->ZoneService->id)));
-        $metadata[$uri] = $service['ZoneService']['id'];
+        $metadata[$uri] = $this->ZoneService->id;
       }
     }
     return $metadata;
@@ -206,11 +202,11 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       switch($attr) {
         // Name attributes
         case 'cn':
-          // Currently only preferred name supported (CO-333)
+          // Currently only preferred name supported
           $attributes[$export_name] = generateCn($provisioningData['PrimaryName']);
           break;
         case 'givenName':
-          // Currently only preferred name supported (CO-333)
+          // Currently only preferred name supported
           $attributes[$export_name] = $provisioningData['PrimaryName']['given'];
           break;
         case 'sn':
@@ -417,13 +413,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
           break;
 
         // Group attributes (cn is covered above)
-        case 'description':
-          // A blank description is invalid, so don't populate if empty
-          if(!empty($provisioningData['CoGroup']['description'])) {
-            $attributes[$export_name] = $provisioningData['CoGroup']['description'];
-          }
-          break;
-
         case 'isMemberOf':
           if(!empty($provisioningData['CoGroupMember'])) {
             foreach($provisioningData['CoGroupMember'] as $gm) {
@@ -448,10 +437,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
           break;
 
         // posixAccount attributes
-        case 'gecos':
-          // Construct using same name as cn
-          $attributes[$export_name] = generateCn($provisioningData['PrimaryName']) . ",,,";
-          break;
         case 'gidNumber':
         case 'homeDirectory':
         case 'uidNumber':
@@ -597,45 +582,29 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
 
     switch($op) {
       case ProvisioningActionEnum::CoPersonAdded:
+      case ProvisioningActionEnum::CoPersonUnexpired:
         $add = true;
         break;
       case ProvisioningActionEnum::CoPersonDeleted:
+      case ProvisioningActionEnum::CoPersonExpired:
+      case ProvisioningActionEnum::CoPersonEnteredGracePeriod:
         $delete = true;
         break;
       case ProvisioningActionEnum::CoPersonPetitionProvisioned:
       case ProvisioningActionEnum::CoPersonPipelineProvisioned:
       case ProvisioningActionEnum::CoPersonReprovisionRequested:
-        $modify = true;
-        break;
-      case ProvisioningActionEnum::CoPersonExpired:
-      case ProvisioningActionEnum::CoPersonEnteredGracePeriod:
-      case ProvisioningActionEnum::CoPersonUnexpired:
       case ProvisioningActionEnum::CoPersonUpdated:
-        if(!in_array($provisioningData['CoPerson']['status'],
-                     array(StatusEnum::Active,
-                           StatusEnum::Expired,
-                           StatusEnum::GracePeriod,
-                           StatusEnum::Suspended))) {
-          // Convert this to a delete operation.
-          $delete = true;
-        } else {
-          // An update may cause an existing person to be written for the first time
-          // or for an unexpectedly removed entry to be replaced
-          $modify = true;
-        }
+        $modify = true;
         break;
       case ProvisioningActionEnum::CoGroupAdded:
       case ProvisioningActionEnum::CoGroupDeleted:
       case ProvisioningActionEnum::CoGroupUpdated:
       case ProvisioningActionEnum::CoGroupReprovisionRequested:
-        // group provisioning not required
-        return TRUE;
-        break;
       case ProvisioningActionEnum::AuthenticatorUpdated:
       case ProvisioningActionEnum::CoEmailListAdded:
       case ProvisioningActionEnum::CoEmailListDeleted:
       case ProvisioningActionEnum::CoEmailListReprovisionRequested:
-      case ProvisioningActionEnum::CoEmailListUpdated:    
+      case ProvisioningActionEnum::CoEmailListUpdated:
       default:
         throw new RuntimeException("Not Implemented");
         break;
@@ -731,7 +700,11 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       $this->ZonePerson->deleteAll(array('uid'=>$uidattr, "co_id" => $coid),true);
     } else if($add || $modify) {
       $person['ZonePerson']['attributes']=$this->convertAttributes($attributes);
+      if(isset($person['ZonePerson']['modified'])) {
+        unset($person['ZonePerson']['modified']);
+      }
       $person['ZoneService']=array_values($services);
+      $this->ZonePerson->clear();
       $this->ZonePerson->saveAssociated($person,array('validate'=>FALSE));
     }
     CakeLog::write('json_not',array("module"=>"zone",
@@ -743,17 +716,17 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     return true;
   }
 
-  /**
+   /**
    * Determine the provisioning status of this target for a CO Person ID.
    *
+   * @since  COmanage Registry vTODO
    * @param  Integer CO Provisioning Target ID
-   * @param  Integer CO Person ID (null if CO Group ID is specified)
-   * @param  Integer CO Group ID (null if CO Person ID is specified)
+   * @param  Model   $Model                  Model being queried for status (eg: CoPerson, CoGroup, CoEmailList)
+   * @param  Integer $id                     $Model ID to check status for
    * @return Array ProvisioningStatusEnum, Timestamp of last update in epoch seconds, Comment
-   * @throws RuntimeException When uidattr is not set
    */
-
-  public function status($coProvisioningTargetId, $coPersonId, $coGroupId=null) {
+  public function status($coProvisioningTargetId, $Model, $id)
+  {
     $ret = array(
       'status'    => ProvisioningStatusEnum::Unknown,
       'timestamp' => null,
@@ -761,12 +734,19 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     );
 
     $config = Configure::load('scz','default');
+     // Pull the object
+    $provisioningData = $Model->find('first', array('conditions'=>array($Model->name.'.id'=>$id)));
     $attributes = $this->assembleAttributes($provisioningData);
     $uidattr = $this->getUID($attributes);
-    $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $this->CoProvisioningData->Co->id)));
-
-    if(!empty($person)) {
-      $ret['timestamp'] = $person['modified'];
+    $this->ZonePerson = ClassRegistry::init('ZoneProvisioner.ZonePerson');
+    try {
+      $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $provisioningData[$Model->name]['co_id'])));
+    } catch(Exception $e) {
+      $person=null; 
+    }
+  
+    if(!empty($person) && isset($person['ZonePerson'])) {
+      $ret['timestamp'] = $person['ZonePerson']['modified'];
       $ret['status'] = ProvisioningStatusEnum::Provisioned;
       $ret['comment'] = $uidattr;
     } else {

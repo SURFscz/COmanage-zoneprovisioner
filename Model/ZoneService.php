@@ -30,7 +30,7 @@ class ZoneService extends AppModel {
   public $hasAndBelongsToMany = array(
     'ZonePerson' =>
       array(
-        'className' => 'ZonePerson',
+        'className' => 'ZoneProvisioner.ZonePerson',
         'joinTable' => 'zone_person_zone_service',
         'foreignKey' => 'zone_service_id',
         'associationForeignKey' => 'zone_person_id',
