@@ -111,6 +111,28 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
   }
 
   /**
+   * Get Service metadata
+   * Services contain 3 fields for URLs: service_url, service_label and entitlement_uri
+   * The service_label is the field we want, but we used entitlement_uri in the past and
+   * service_url was introduced before service_label
+   *
+   * @param  Array service Service object
+   * @return String service metadata url
+   */
+  private function serviceMetadata($service) {
+    if(!empty($service['service_label']) && strlen(trim($service['service_label'])) > 0) {
+      return $service['service_label'];
+    }
+    if(!empty($service['entitlement_uri']) && strlen(trim($service['entitlement_uri'])) > 0) {
+      return $service['entitlement_uri'];
+    }
+    if(!empty($service['service_url']) && strlen(trim($service['service_url'])) > 0) {
+      return $service['service_url'];
+    }
+    return '';
+  }
+
+  /**
    * Assemble services
    *
    * @param  Array                  $provisioningData         CO Person or CO Group Data used for provisioning
@@ -118,6 +140,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
    * @throws UnderflowException
    */
   protected function assembleServices($provisioningData) {
+
     $coid=$provisioningData["Co"]["id"];
     $services = $this->findServicesByPerson(
       $coid,
@@ -127,23 +150,35 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
 
     $uris=array();
     foreach($services as $service) {
-      $uris[$service['CoService']['entitlement_uri']]=$service['CoService'];
+      $metadata_url = $this->serviceMetadata($service['CoService']);
+      if(!empty($metadata_url)) {
+        $uris[$metadata_url]=$service['CoService'];
+      }
     }
+
     // check these services exists as ZoneService
     $this->ZoneService->contain(FALSE);
     $services=$this->ZoneService->find('all',array('conditions'=> array('metadata' => array_keys($uris), 'co_id' => $coid)));
     $metadata=array();
     foreach($services as $service) {
-      $metadata[$service['ZoneService']['metadata']] = $service['ZoneService']['id'];
+      $metadata_url = $service['ZoneService']['metadata'];
+      if(!empty($metadata_url)) {
+        $metadata[$metadata_url]=$service['ZoneService']['id'];
+      }
     }
     foreach($uris as $uri=>$model) {
-      if(!isset($metadata[$uri]) && strlen(trim($uri))) {
+      if(!isset($metadata[$uri])) {
+
         // create a new ZoneService
         $this->ZoneService->clear();
         $this->ZoneService->save(array(
           'metadata'=>$uri,
           'co_id' => $coid,
-          'attributes' => json_encode(array('co_service_id'=>$model['id']))
+          'attributes' => json_encode(array(
+            'co_service_id'=>$model['id'],
+            'service_url' => $model['service_url'],
+            'entitlement_uri' => $model['entitlement_uri']
+            ))
           ));
         $metadata[$uri] = $this->ZoneService->id;
       }
@@ -559,6 +594,8 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
 
   /**
    * Provision for the specified CO Person.
+   * The ZoneProvisioner is simple: either add or delete (or: to-delete-or-not-to-delete)
+   * If not deleting, we do a saveAssociated, which will insert-or-update (add/modify)
    *
    * @since  COmanage Registry vTODO
    * @param  Array CO Provisioning Target data
@@ -572,8 +609,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
   public function provision($coProvisioningTargetData, $op, $provisioningData) {
     // First figure out what to do
     $delete   = false;
-    $add      = false;
-    $modify   = false;
 
     if(empty($provisioningData['CoPerson']['id'])) {
       // do not provision group information
@@ -583,18 +618,20 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     switch($op) {
       case ProvisioningActionEnum::CoPersonAdded:
       case ProvisioningActionEnum::CoPersonUnexpired:
-        $add = true;
+      case ProvisioningActionEnum::CoPersonPetitionProvisioned:
+      case ProvisioningActionEnum::CoPersonPipelineProvisioned:
+      case ProvisioningActionEnum::CoPersonReprovisionRequested:
+      case ProvisioningActionEnum::CoPersonUpdated:
+        if($provisioningData['CoPerson']['status'] == StatusEnum::Active) {
+          $delete = false;
+        } else {
+          $delete=true;
+        }
         break;
       case ProvisioningActionEnum::CoPersonDeleted:
       case ProvisioningActionEnum::CoPersonExpired:
       case ProvisioningActionEnum::CoPersonEnteredGracePeriod:
         $delete = true;
-        break;
-      case ProvisioningActionEnum::CoPersonPetitionProvisioned:
-      case ProvisioningActionEnum::CoPersonPipelineProvisioned:
-      case ProvisioningActionEnum::CoPersonReprovisionRequested:
-      case ProvisioningActionEnum::CoPersonUpdated:
-        $modify = true;
         break;
       case ProvisioningActionEnum::CoGroupAdded:
       case ProvisioningActionEnum::CoGroupDeleted:
@@ -614,7 +651,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
                         "action"=>"provision",
                         "id" => $actionid,
                         "operation" => $op,
-                        "message" => "start",
+                        "message" => ($delete ? "Removing user ":"Adding user ").generateCn($provisioningData['PrimaryName']),
                         "co_id"=>$provisioningData["Co"]["id"],
                         "co_name"=>$provisioningData["Co"]["name"]));
 
@@ -623,7 +660,9 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     $this->ZoneService = ClassRegistry::init('ZoneProvisioner.ZoneService');
 
     $attributes = $this->assembleAttributes($provisioningData);
+
     try {
+
       $services = $this->assembleServices($provisioningData);
       if(empty($services)) {
         CakeLog::write('json_err',array("module"=>"zone",
@@ -638,6 +677,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
                           "message" => "failed to assemble services: ".$e->getMessage()));
       $services=array();
     }
+
     $uidattr = $this->getUID($attributes);
     if($uidattr === null)
     {
@@ -650,6 +690,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
                             "message" => "CoPerson misses uid attribute '$uidattr'"));
         return true;
     }
+
     $coid = intval($provisioningData["Co"]["id"]);
     $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $coid)));
     if(empty($person)) {
@@ -662,7 +703,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         // we are already done
         return TRUE;
       }
-      $add=true;
+
       try {
         $this->ZonePerson->save(array('uid'=>$uidattr, "co_id" => $coid, 'attributes'=>''));
         $person = $this->ZonePerson->find('first',array('conditions'=>array('id'=>$this->ZonePerson->id)));
@@ -698,7 +739,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
       // process, to minimise the chances a slow-change will be outpaced by a fast-delete.
       // However, the assembleAttributes call is probably by far the slowest part anyway.
       $this->ZonePerson->deleteAll(array('uid'=>$uidattr, "co_id" => $coid),true);
-    } else if($add || $modify) {
+    } else {
       $person['ZonePerson']['attributes']=$this->convertAttributes($attributes);
       if(isset($person['ZonePerson']['modified'])) {
         unset($person['ZonePerson']['modified']);
@@ -742,9 +783,9 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     try {
       $person = $this->ZonePerson->find('first',array('conditions'=>array('uid'=>$uidattr, "co_id" => $provisioningData[$Model->name]['co_id'])));
     } catch(Exception $e) {
-      $person=null; 
+      $person=null;
     }
-  
+
     if(!empty($person) && isset($person['ZonePerson'])) {
       $ret['timestamp'] = $person['ZonePerson']['modified'];
       $ret['status'] = ProvisioningStatusEnum::Provisioned;
