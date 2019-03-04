@@ -30,7 +30,7 @@ The configuration resides inside a ```config``` variable and specifies basic ser
 * attributes: a list of exportable attributes and their options
 
 The attribute list is a keyed array, with the key representing the output attribute name and the value an array of options. For each attribute, the following options can be specified:
-* name: the actual name of the attribute to replace. Usually, output name and attribute name are identical, but this allows rekeying the attribute
+* attribute: the actual name of the attribute to replace. Usually, output name and attribute name are identical, but this allows rekeying the attribute, where a different export name is used as key and this field points to the original attribute
 * type: the identifier, address or number type to take content from. This is usually something like 'home', 'official', 'fax', or 'network'. Values for type can be found in the relevant COmanage enumeration list for resp. identifiers, addresses and numbers. This type specification can be an array of types if several sources have to be checked.
 * multiple: can be one of 'single', 'unique' and 'allow'. If not set, defaults to 'unique'. This determines what is done with attributes containing more than one value. 'single' will take the first value found. 'unique' will loop over all values and only retain unique content. 'allow' will leave duplicates.
 * case: true or false (default). If set to true, unique checks for the multiple setting above are done case-sensitively.
@@ -84,6 +84,7 @@ $config=array(
 
       'cn' => array(),
       'givenName'=>array(),
+      'urn:mace:dir:attribute-def:givenName'=>array('attribute'=>'givenName', 'multiple'=>'single'),
       'sn'=>array(),
       'displayName'=>array('type'=>'preferred'),
       'eduPersonNickname'=>array('type'=>'official'),
@@ -93,12 +94,14 @@ $config=array(
       'o' => array(),
       'ou'=>array(),
       'title'=>array(),
+      'urn:oid:2.5.4.12' => array('attribute'=>'title'),
+      
       'eduPersonOrcid' => array(),
       'eduPersonPrincipalName' => array('type'=>'eppn'),
       'eduPersonPrincipalNamePrior' => array(),
       'employeeNumber' => array('type'=>'uid'),
       'mail'=>array(),
-      'uid' => array('type'=>'official'),
+      'uid' => array('type'=>'uid'),
 
       'sshPublicKey' => array(),
       'fax' => array('attribute'=>'facsimileTelephoneNumber', 'type'=>'fax'),

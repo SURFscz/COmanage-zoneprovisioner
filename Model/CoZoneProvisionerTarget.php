@@ -207,10 +207,12 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
 
     // Marshalled attributes ready for export
     $attributes = array();
+    $constitutions = array(); // not exported metadata
 
     // loop over all configured attributes. All configured attributes are required
     foreach($configured_attributes as $export_name => $constitution) {
       $attr = isset($constitution['attribute']) ? $constitution['attribute'] : $export_name;
+      $constitutions[$export_name] = $constitution; // store meta-data for later use
 
       if(isset($constitution['plugin'])) {
         // plugin to ldapschema to allow different plugins to create attributes for us
@@ -497,13 +499,21 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     // - the attribute can have multiple values, but they must be unique
     // - the attribute does not care
     //
-    // Because the latter does not differ significantly from the second, we
-    // implement 'unique' by default, unless multiple is set to 'allow'
-    $multiple = isset($constitution['multiple']) && in_array($constitution['multiple'],array('single','unique','allow')) ? $constitution['multiple'] : 'unique';
 
     foreach(array_keys($attributes) as $a) {
+      $constitution = isset($constitutions[$a]) ? $constitutions[$a] : array();
+
+      // Because the does-not-care does not differ significantly from the unique,
+      // (implementation-wise) we implement 'unique' by default, unless multiple
+      // is set to 'allow'
+      $multiple = isset($constitution['multiple']) && in_array($constitution['multiple'],array('single','unique','allow'))
+            ? $constitution['multiple'] : 'unique';
+
       if(is_array($attributes[$a])) {
-        if($multiple == 'unique') {
+        // remove empty arrays, they are senseless
+        if(sizeof($attributes[$a]) == 0) {
+          unset($attributes[$a]);
+        } else if($multiple == 'unique') {
           $case_sensitive = isset($constitution['case']) ? $constitution['case'] : FALSE;
           $duplicates = array();
 
