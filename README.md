@@ -35,6 +35,8 @@ The attribute list is a keyed array, with the key representing the output attrib
 * multiple: can be one of 'single', 'unique' and 'allow'. If not set, defaults to 'unique'. This determines what is done with attributes containing more than one value. 'single' will take the first value found. 'unique' will loop over all values and only retain unique content. 'allow' will leave duplicates.
 * case: true or false (default). If set to true, unique checks for the multiple setting above are done case-sensitively.
 * use_org: true or false (default). If set, takes attributes from the COOrgIdentity instead of the COPersonIdentity.
+* authority: authority suffix to append to group entitlements according to AARC deliverable AARC-JRA1.4A
+* namespace: namespace prefix to prepend to group entitlements according to AARC deliverable AARC-JRA1.4A
 
 Supported attributes are:
 * cn: from PrimaryName (single)
@@ -70,6 +72,26 @@ Supported attributes are:
 * gidnumber: from Identifier
 * homeDirectory: from Identifier
 * uidNumber: from Identifier
+
+Group Entitlements
+==================
+According to AARC deliverable [AARC-JRA1.4A](https://aarc-project.eu/wp-content/uploads/2017/11/AARC-JRA1.4A-201710.pdf)
+group memberships should be exposed as `eduPersonEntitlement` attributes with a syntax like:
+```
+<NAMESPACE>:group:parent-group:child-group#<GROUP-AUTHORITY>
+```
+
+The ZoneProvisioner uses two configurable attributes, `namespace` and `authority`, to create this string based on the
+group membership. The entitlement always starts with `urn:mace:`, followed by the configured namespace, then the
+CO name and the group name. The authority is appended with a pound sign (should not be included in the configuration option).
+
+The URN is url encoded, except for colon characters. Because colon characters are also present in the namespace and in
+group names, an encode-everything/decode-colon step is performed on all values except the authority (which is only encoded).
+
+Typical URNs will look like:
+```
+  urn:mace:surf.nl:test:COmanage:CO:members:all#test.scz.surf.nl
+```
 
 Example
 =======
@@ -125,6 +147,7 @@ $config=array(
   )
 );
 ```
+
 Tests
 =====
 This plugin comes without unit tests at the moment.

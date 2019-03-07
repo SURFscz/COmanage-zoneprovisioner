@@ -470,6 +470,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
                                              ->CoGroup
                                              ->CoService
                                              ->mapCoGroupsToEntitlements($provisioningData['Co']['id'], $entGroupIds);
+            $attributes[$export_name] = $attributes[$export_name] + $this->mapGroupsToEntitlement($provisioningData['Co'],$provisioningData['CoGroupMember']);
           }
           break;
 
@@ -770,7 +771,6 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
    /**
    * Determine the provisioning status of this target for a CO Person ID.
    *
-   * @since  COmanage Registry vTODO
    * @param  Integer CO Provisioning Target ID
    * @param  Model   $Model                  Model being queried for status (eg: CoPerson, CoGroup, CoEmailList)
    * @param  Integer $id                     $Model ID to check status for
@@ -806,4 +806,41 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
     }
     return $ret;
   }
+
+  /**
+   * Create group entitlements based on group membership.
+   * This is in addition to entitlements based on services.
+   *
+   * @param  Array array of group memberships
+   * @return Array array of entitlement uris
+   *
+   * Entitlement uri's are constructed as follows:
+   *  urn:mace:<base namespace>:group:<CO>:<group name>#<authority>
+   * where base namespace and authority are configurable settings
+   */
+  private function mapGroupsToEntitlement($co, $groups) {
+    $retval = array();
+    $namespace = Configure::read('scz.namespace');
+    $authority = Configure::read('scz.authority');
+
+    if(!empty($groups)) {
+      foreach($groups as $gm) {
+        if(  isset($gm['member']) && $gm['member']
+          && !empty($gm['CoGroup']['name'])) {
+          // we need to url-encode the group name, but the group name contains a colon as
+          // group separator that we would like to keep
+          // Also, the namespace could contain spaces, but it also could contain escapable
+          // characters. So we are going to urlencode the bunch, then translate back the colon
+          //
+          // To avoid encoding the pound sign for the authority, we encode that separately.
+          $urn = urlencode("urn:mace:$namespace:".$co['name'].":".$gm['CoGroup']['name']);
+          // replace the colon back
+          $urn = str_replace("%3A",":",$urn);
+          $retval[]=$urn."#".urlencode($authority);
+        }
+      }
+    }
+    return $retval;
+  }
+
 }
