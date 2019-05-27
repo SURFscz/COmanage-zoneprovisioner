@@ -36,6 +36,8 @@ $cm_zone_provisioner_texts['en_US'] = array(
   'ct.co_zone_provisioner_targets.1'  => 'SCZ Provisioner Target',
   'ct.co_zone_provisioner_targets.pl' => 'SCZ Provisioner Targets',
 
+  'er.co_zone_provisioner.unprovisioned' => 'Object not provisioned',
+
   // Plugin texts
   'pl.scz.info'         => 'The SCZ Provisioner provisions the group and its members using a fixed scheme. There are no further configuration options.',
 );
