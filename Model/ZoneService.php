@@ -177,7 +177,6 @@ class ZoneService extends ZoneModel {
       }
       $service['ZonePerson']=$people;
       $this->clear();
-      CakeLog::write('debug','provisioning service: '.json_encode($service));
       $this->saveAssociated($service,array('validate'=>FALSE));
     }
 
