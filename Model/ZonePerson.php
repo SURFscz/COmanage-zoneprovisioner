@@ -516,6 +516,14 @@ class ZonePerson extends ZoneModel {
     $attributes = $this->assembleAttributes($provisioningData);
 
     $uidattr = $this->getUID($attributes);
+
+    CakeLog::write('json_not',array("module"=>"zone",
+                        "action"=>"provision",
+                        "id" => $actionid,
+                        "uid" => $uidattr,
+                        "co_person_id" => $provisioningData['CoPerson']['id'],
+                        "message" => "Provisioning ZonePerson"));
+
     if($uidattr === null)
     {
       // this person cannot be provisioned, because it is not complete
@@ -524,18 +532,29 @@ class ZonePerson extends ZoneModel {
       CakeLog::write('json_err',array("module"=>"zone",
                           "action"=>"provision",
                           "id" => $actionid,
+                          "co_person_id" => $provisioningData['CoPerson']['id'],
                           "message" => "CoPerson misses uid attribute '$uidattr'"));
       return true;
     }
 
     $coid = intval($provisioningData["Co"]["id"]);
-    $person = $this->find('first',array('conditions'=>array('co_person_id'=>$provisioningData['CoPerson']['id'])));
+    try {
+      $person = $this->find('first',array('conditions'=>array('co_person_id'=>$provisioningData['CoPerson']['id'])));
+    }
+    catch(Exception $e) {
+      CakeLog::write('error','zoneprovisioner: cannot connect to remote database');
+      CakeLog::write('json_err',array("module"=>"zone",
+                          "action"=>"provision",
+                          "id" => $actionid,
+                          "co_person_id" => $provisioningData['CoPerson']['id'],
+                          "message" => "Cannot connect to remote database"));
+      return true;
+    }
     if(empty($person)) {
       if($delete) {
         CakeLog::write('json_not',array("module"=>"zone",
                             "action"=>"provision",
                             "id" => $actionid,
-                            "uid" => $uidattr,
                             "message" => "ZonePerson not found, end of delete operation"));
         // we are already done
         return TRUE;
@@ -548,7 +567,7 @@ class ZonePerson extends ZoneModel {
         CakeLog::write('json_err',array("module"=>"zone",
                             "action"=>"provision",
                             "id" => $actionid,
-                            "uid" => $uidattr,
+                            "co_person_id" => $provisioningData['CoPerson']['id'],
                             "message" => "Error saving ZonePerson: ".$e->getMessage()));
         $person=null;
       }
@@ -559,7 +578,7 @@ class ZonePerson extends ZoneModel {
       CakeLog::write('json_err',array("module"=>"zone",
                           "action"=>"provision",
                           "id" => $actionid,
-                          "uid" => $uidattr,
+                          "co_person_id" => $provisioningData['CoPerson']['id'],
                           "message" => "Cannot connect to remote database"));
       throw new RuntimeException("Error writing to database");
     }
@@ -583,12 +602,14 @@ class ZonePerson extends ZoneModel {
           CakeLog::write('json_err',array("module"=>"zone",
                               "action"=>"provision",
                               "id" => $actionid,
+                              "co_person_id" => $provisioningData['CoPerson']['id'],
                               "message" => "no services configured"));
         }
       } catch(Exception $e) {
         CakeLog::write('json_err',array("module"=>"zone",
                             "action"=>"provision",
                             "id" => $actionid,
+                            "co_person_id" => $provisioningData['CoPerson']['id'],
                             "message" => "failed to assemble services: ".$e->getMessage()));
         $services=array();
       }
@@ -605,7 +626,6 @@ class ZonePerson extends ZoneModel {
     CakeLog::write('json_not',array("module"=>"zone",
                         "action"=>"provision",
                         "id" => $actionid,
-                        "uid" => $uidattr,
                         "message" => "end of provisioning"));
 
   }

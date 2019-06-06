@@ -112,10 +112,10 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         }
         if($provisioningData['CoPerson']['status'] == StatusEnum::Active) {
           $delete = false;
-          $action="Adding user ".generateCn($provisioningData['PrimaryName']);
+          $action="Adding user ".generateCn($provisioningData['PrimaryName']). '('.$provisioningData['CoPerson']['id'].')';
         } else {
           $delete=true;
-          $action="Removing user ".generateCn($provisioningData['PrimaryName']);
+          $action="Removing user ".generateCn($provisioningData['PrimaryName']). '('.$provisioningData['CoPerson']['id'].')';
         }
         break;
       case ProvisioningActionEnum::CoPersonDeleted:
@@ -129,7 +129,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
           return true;
         }
         $delete = true;
-        $action="Removing user ".generateCn($provisioningData['PrimaryName']);
+        $action="Removing user ".generateCn($provisioningData['PrimaryName']). '('.$provisioningData['CoPerson']['id'].')';
         break;
       case ProvisioningActionEnum::CoServiceAdded:
       case ProvisioningActionEnum::CoServiceUpdated:
@@ -143,10 +143,10 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
         }
         if($provisioningData['CoService']['status'] == StatusEnum::Active) {
           $delete = false;
-          $action="Adding service ".$provisioningData['CoService']['name'];
+          $action="Adding service ".$provisioningData['CoService']['name'].' ('.$provisioningData['CoService']['id'].')';
         } else {
           $delete=true;
-          $action="Removing service ".$provisioningData['CoService']['name'];
+          $action="Removing service ".$provisioningData['CoService']['name'].' ('.$provisioningData['CoService']['id'].')';
         }
         break;
       case ProvisioningActionEnum::CoServiceDeleted:
@@ -158,7 +158,7 @@ class CoZoneProvisionerTarget extends CoProvisionerPluginTarget {
           return true;
         }
         $delete = true;
-        $action="Removing service ".$provisioningData['CoService']['name'];
+        $action="Removing service ".$provisioningData['CoService']['name'].' ('.$provisioningData['CoService']['id'].')';
         break;
       case ProvisioningActionEnum::CoGroupAdded:
       case ProvisioningActionEnum::CoGroupDeleted:

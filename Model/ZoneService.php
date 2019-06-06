@@ -110,7 +110,25 @@ class ZoneService extends ZoneModel {
 
     $attributes = $this->assembleAttributes($provisioningData);
     $metadata = $this->serviceMetadata($provisioningData['CoService']);
-    $service = $this->find('first',array('conditions'=>array('co_service_id'=>$provisioningData['CoService']['id'])));
+    CakeLog::write('json_not',array("module"=>"zone",
+                        "action"=>"provision",
+                        "id" => $actionid,
+                        "metadata" => $metadata,
+                        "co_service_id" => $provisioningData['CoService']['id'],
+                        "message" => "Provisioning ZoneService"));
+
+    try {
+      $service = $this->find('first',array('conditions'=>array('co_service_id'=>$provisioningData['CoService']['id'])));
+    }
+    catch(Exception $e) {
+      CakeLog::write('error','zoneprovisioner: cannot connect to remote database');
+      CakeLog::write('json_err',array("module"=>"zone",
+                          "action"=>"provision",
+                          "id" => $actionid,
+                          "co_service_id" => $provisioningData['CoService']['id'],
+                          "message" => "Cannot connect to remote database"));
+      return true;
+    }
     $coid = $provisioningData['CoService']['co_id'];
 
     if(empty($service)) {
@@ -118,7 +136,6 @@ class ZoneService extends ZoneModel {
         CakeLog::write('json_not',array("module"=>"zone",
                             "action"=>"provision",
                             "id" => $actionid,
-                            "metadata" => $metadata,
                             "message" => "ZoneService not found, end of delete operation"));
         // we are already done
         return TRUE;
@@ -131,7 +148,7 @@ class ZoneService extends ZoneModel {
         CakeLog::write('json_err',array("module"=>"zone",
                             "action"=>"provision",
                             "id" => $actionid,
-                            "metadata" => $metadata,
+                            "co_service_id" => $provisioningData['CoService']['id'],
                             "message" => "Error saving ZoneService: ".$e->getMessage()));
         $service=null;
       }
@@ -142,7 +159,7 @@ class ZoneService extends ZoneModel {
       CakeLog::write('json_err',array("module"=>"zone",
                           "action"=>"provision",
                           "id" => $actionid,
-                          "metadata" => $metadata,
+                          "co_service_id" => $provisioningData['CoService']['id'],
                           "message" => "Cannot connect to remote database"));
       throw new RuntimeException("Error writing to database");
     }
@@ -166,6 +183,7 @@ class ZoneService extends ZoneModel {
         CakeLog::write('json_err',array("module"=>"zone",
                             "action"=>"provision",
                             "id" => $actionid,
+                            "co_service_id" => $provisioningData['CoService']['id'],
                             "message" => "failed to assemble people for servics: ".$e->getMessage()));
         $people=array();
       }
@@ -183,9 +201,7 @@ class ZoneService extends ZoneModel {
     CakeLog::write('json_not',array("module"=>"zone",
                         "action"=>"provision",
                         "id" => $actionid,
-                        "uid" => $this->serviceMetadata($service),
                         "message" => "end of provisioning"));
-
   }
 
   public function status($id) {
