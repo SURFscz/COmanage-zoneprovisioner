@@ -561,6 +561,7 @@ class ZonePerson extends ZoneModel {
       }
 
       try {
+        $this->clear();
         $this->save(array('uid'=>$uidattr, "co_id" => $coid, 'co_person_id' => $provisioningData['CoPerson']['id'], 'attributes'=>''));
         $person = $this->find('first',array('conditions'=>array('id'=>$this->id)));
       } catch(Exception $e) {

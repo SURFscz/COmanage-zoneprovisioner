@@ -142,6 +142,7 @@ class ZoneService extends ZoneModel {
       }
 
       try {
+        $this->clear();
         $this->save(array('metadata'=>$metadata, "co_id" => $coid, 'co_service_id'=>$provisioningData['CoService']['id'], 'attributes'=>''));
         $service = $this->find('first',array('conditions'=>array('id'=>$this->id)));
       } catch(Exception $e) {
